@@ -11,6 +11,7 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -26,8 +27,11 @@ public class UserController {
   private final UserService userService;
 
   @GetMapping
-  public Mono<PageResponseDTO<UserDTO>> findUsers() {
-    return userService.findUsers();
+  public Mono<PageResponseDTO<UserDTO>> findUsers(
+      @RequestParam(value = "pageNumber", defaultValue = "0") int pageNumber,
+      @RequestParam(value = "limit", defaultValue = "10") int limit
+  ) {
+    return userService.findUsers(pageNumber, limit);
   }
 
   @PutMapping("/{id}")

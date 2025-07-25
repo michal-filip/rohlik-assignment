@@ -1,5 +1,11 @@
 import React, { useState } from "react";
-import { toggleUserActive } from "../api/user";
+import {
+  fetchUsers,
+  toggleUserActive,
+  deleteUser,
+  User,
+  PaginatedResult,
+} from "../api/user";
 import { useQuery } from "@tanstack/react-query";
 import {
   Box,
@@ -35,38 +41,21 @@ import {
 } from "@mui/icons-material";
 import { format } from "date-fns";
 
-type User = {
-  id: string;
-  name: string;
-  surname: string;
-  active: boolean;
-  email: string;
-  phoneNumber: string;
-  createdAt: string;
-};
-
-type PaginatedResult<T> = {
-  content: T[];
-  totalElements: number;
-};
-
-// Fetch users from backend
-async function fetchUsers(): Promise<PaginatedResult<User>> {
-  const res = await fetch("http://localhost:8090/api/users");
-  if (!res.ok) throw new Error("Failed to fetch users");
-  return res.json();
-}
-
 export function UserManagement() {
+  const [currentPage, setCurrentPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(5);
   const {
-    data: usersPage = { content: [], totalElements: 0 },
+    data: usersPage = {
+      content: [],
+      totalElements: 0,
+    } as PaginatedResult<User>,
     isLoading,
     isError,
     error,
     refetch,
   } = useQuery<PaginatedResult<User>>({
-    queryKey: ["users"],
-    queryFn: fetchUsers,
+    queryKey: ["users", currentPage, rowsPerPage],
+    queryFn: () => fetchUsers(currentPage, rowsPerPage),
   });
   const [filters, setFilters] = useState({
     id: "",
@@ -75,8 +64,6 @@ export function UserManagement() {
     dateFrom: null as Date | null,
     dateTo: null as Date | null,
   });
-  const [currentPage, setCurrentPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(5);
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: "",
@@ -138,12 +125,19 @@ export function UserManagement() {
     showSnackbar(`Edit user ${userId} - Feature coming soon`, "info");
   };
 
-  const handleDelete = (userId: string) => {
-    // TODO: implement
-
-    showSnackbar("User deleted");
-    if (usersPage.content.length === 1 && currentPage > 0) {
-      setCurrentPage(0);
+  const handleDelete = async (userId: string) => {
+    try {
+      await deleteUser(userId);
+      showSnackbar("User deleted");
+      refetch();
+      if (usersPage.content.length === 1 && currentPage > 0) {
+        setCurrentPage(0);
+      }
+    } catch (err) {
+      showSnackbar(
+        err instanceof Error ? err.message : "Failed to delete user",
+        "error"
+      );
     }
   };
 

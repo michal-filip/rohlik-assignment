@@ -7,7 +7,7 @@ import java.util.UUID;
 import reactor.core.publisher.Mono;
 
 public interface UserService {
-  Mono<PageResponseDTO<UserDTO>> findUsers();
+  Mono<PageResponseDTO<UserDTO>> findUsers(int pageNumber, int limit);
   Mono<Void> updateUser(UUID id, UserUpdateDTO dto);
   Mono<Void> updateUserActive(UUID id, boolean active);
   Mono<Void> deleteUser(UUID id);
