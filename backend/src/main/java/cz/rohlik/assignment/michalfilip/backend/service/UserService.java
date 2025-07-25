@@ -8,4 +8,5 @@ import reactor.core.publisher.Mono;
 public interface UserService {
   Mono<PageResponseDTO<UserDTO>> findUsers();
   Mono<Void> deleteUser(UUID id);
+  Mono<Void> updateUserActive(UUID id, boolean active);
 }
