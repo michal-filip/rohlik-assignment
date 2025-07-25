@@ -13,14 +13,27 @@ export type PaginatedResult<T> = {
   totalElements: number;
 };
 
+
+export type UserFilters = {
+  name?: string;
+  surname?: string;
+  email?: string;
+  active?: boolean;
+};
+
 export async function fetchUsers(
   pageNumber = 0,
-  limit = 10
+  limit = 10,
+  filters: UserFilters = {}
 ): Promise<PaginatedResult<User>> {
   const params = new URLSearchParams({
     pageNumber: pageNumber.toString(),
     limit: limit.toString(),
   });
+  if (filters.name) params.append("name", filters.name);
+  if (filters.surname) params.append("surname", filters.surname);
+  if (filters.email) params.append("email", filters.email);
+  if (typeof filters.active === "boolean") params.append("active", String(filters.active));
   const res = await fetch(`http://localhost:8090/api/users?${params}`);
   if (!res.ok) throw new Error("Failed to fetch users");
   return res.json();

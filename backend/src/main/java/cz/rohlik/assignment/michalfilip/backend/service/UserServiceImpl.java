@@ -1,6 +1,8 @@
   package cz.rohlik.assignment.michalfilip.backend.service;
 
+import cz.rohlik.assignment.michalfilip.backend.dto.UserFilterDTO;
 import cz.rohlik.assignment.michalfilip.backend.dto.UserUpdateDTO;
+import cz.rohlik.assignment.michalfilip.backend.spec.UserSpecification;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.annotation.Transactional;
 import cz.rohlik.assignment.michalfilip.backend.dto.PageResponseDTO;
@@ -23,12 +25,13 @@ public class UserServiceImpl implements UserService {
   private final Scheduler jdbcScheduler = Schedulers.boundedElastic();
 
   @Override
-  public Mono<PageResponseDTO<UserDTO>> findUsers(int pageNumber, int limit) {
-    return Mono.fromCallable(() -> userRepository.findAll(PageRequest.of(pageNumber, limit)))
-        .map(page -> userMapper.toUserDTOList(page.getContent()))
-        .zipWith(Mono.fromCallable(() -> userRepository.count()))
-        .subscribeOn(jdbcScheduler)
-        .map(tuple -> new PageResponseDTO<UserDTO>(tuple.getT1(), tuple.getT2().longValue()));
+  public Mono<PageResponseDTO<UserDTO>> findUsers(int pageNumber, int limit, UserFilterDTO filter) {
+    return Mono.fromCallable(() -> {
+      var spec = UserSpecification.build(filter);
+      var page = userRepository.findAll(spec, PageRequest.of(pageNumber, limit));
+      var total = userRepository.count(spec);
+      return new PageResponseDTO<UserDTO>(userMapper.toUserDTOList(page.getContent()), total);
+    }).subscribeOn(jdbcScheduler);
   }
 
   @Override

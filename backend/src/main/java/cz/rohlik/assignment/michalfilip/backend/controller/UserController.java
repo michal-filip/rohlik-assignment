@@ -4,6 +4,7 @@ package cz.rohlik.assignment.michalfilip.backend.controller;
 import cz.rohlik.assignment.michalfilip.backend.dto.PageResponseDTO;
 import cz.rohlik.assignment.michalfilip.backend.dto.UserActiveDTO;
 import cz.rohlik.assignment.michalfilip.backend.dto.UserDTO;
+import cz.rohlik.assignment.michalfilip.backend.dto.UserFilterDTO;
 import cz.rohlik.assignment.michalfilip.backend.dto.UserUpdateDTO;
 import cz.rohlik.assignment.michalfilip.backend.service.UserService;
 import jakarta.validation.Valid;
@@ -29,9 +30,18 @@ public class UserController {
   @GetMapping
   public Mono<PageResponseDTO<UserDTO>> findUsers(
       @RequestParam(value = "pageNumber", defaultValue = "0") int pageNumber,
-      @RequestParam(value = "limit", defaultValue = "10") int limit
+      @RequestParam(value = "limit", defaultValue = "10") int limit,
+      @RequestParam(value = "name", required = false) String name,
+      @RequestParam(value = "surname", required = false) String surname,
+      @RequestParam(value = "email", required = false) String email,
+      @RequestParam(value = "active", required = false) Boolean active
   ) {
-    return userService.findUsers(pageNumber, limit);
+    var filter = new UserFilterDTO();
+    filter.setName(name);
+    filter.setSurname(surname);
+    filter.setEmail(email);
+    filter.setActive(active);
+    return userService.findUsers(pageNumber, limit, filter);
   }
 
   @PutMapping("/{id}")

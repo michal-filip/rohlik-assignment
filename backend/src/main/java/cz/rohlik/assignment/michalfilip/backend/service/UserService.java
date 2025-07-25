@@ -6,8 +6,10 @@ import cz.rohlik.assignment.michalfilip.backend.dto.UserUpdateDTO;
 import java.util.UUID;
 import reactor.core.publisher.Mono;
 
+import cz.rohlik.assignment.michalfilip.backend.dto.UserFilterDTO;
+
 public interface UserService {
-  Mono<PageResponseDTO<UserDTO>> findUsers(int pageNumber, int limit);
+  Mono<PageResponseDTO<UserDTO>> findUsers(int pageNumber, int limit, UserFilterDTO filter);
   Mono<Void> updateUser(UUID id, UserUpdateDTO dto);
   Mono<Void> updateUserActive(UUID id, boolean active);
   Mono<Void> deleteUser(UUID id);
