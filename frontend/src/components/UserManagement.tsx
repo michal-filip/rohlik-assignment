@@ -31,6 +31,7 @@ import {
   CardContent,
   Snackbar,
   Alert,
+  Dialog,
 } from "@mui/material";
 
 import {
@@ -113,6 +114,10 @@ export function UserManagement() {
     severity: "success" as "success" | "info" | "warning" | "error",
   });
 
+  // Confirmation modal state
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
+
   // Filter users based on current filters
   // const filteredUsers = useMemo(() => {
   //   return users.filter((user) => {
@@ -168,9 +173,17 @@ export function UserManagement() {
     showSnackbar(`Edit user ${userId} - Feature coming soon`, "info");
   };
 
-  const handleDelete = async (userId: string) => {
+  // Show confirmation modal before deleting
+  const handleDeleteRequest = (user: User) => {
+    setUserToDelete(user);
+    setConfirmOpen(true);
+  };
+
+  // Confirm deletion
+  const handleDeleteConfirmed = async () => {
+    if (!userToDelete) return;
     try {
-      await deleteUser(userId);
+      await deleteUser(userToDelete.id);
       showSnackbar("User deleted");
       fetchAndSetUsers();
       if (usersPage.content.length === 1 && currentPage > 0) {
@@ -181,7 +194,16 @@ export function UserManagement() {
         err instanceof Error ? err.message : "Failed to delete user",
         "error"
       );
+    } finally {
+      setConfirmOpen(false);
+      setUserToDelete(null);
     }
+  };
+
+  // Cancel deletion
+  const handleDeleteCancel = () => {
+    setConfirmOpen(false);
+    setUserToDelete(null);
   };
 
   const handleChangePage = (event: unknown, newPage: number) => {
@@ -392,12 +414,50 @@ export function UserManagement() {
                         </IconButton>
                         <IconButton
                           size="small"
-                          onClick={() => handleDelete(user.id)}
+                          onClick={() => handleDeleteRequest(user)}
                           color="error"
                           title="Delete"
                         >
                           <DeleteIcon />
                         </IconButton>
+                        {/* Confirmation Modal for Deletion */}
+                        <Dialog open={confirmOpen} onClose={handleDeleteCancel}>
+                          <Box sx={{ p: 2 }}>
+                            <Typography variant="h6" gutterBottom>
+                              Confirm Deletion
+                            </Typography>
+                            <Typography gutterBottom>
+                              Are you sure you want to delete user{" "}
+                              <b>
+                                {userToDelete?.name} {userToDelete?.surname}
+                              </b>
+                              ?
+                            </Typography>
+                            <Box
+                              sx={{
+                                display: "flex",
+                                justifyContent: "flex-end",
+                                gap: 2,
+                                mt: 2,
+                              }}
+                            >
+                              <Button
+                                onClick={handleDeleteCancel}
+                                color="primary"
+                                variant="outlined"
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                onClick={handleDeleteConfirmed}
+                                color="error"
+                                variant="contained"
+                              >
+                                Delete
+                              </Button>
+                            </Box>
+                          </Box>
+                        </Dialog>
                       </Box>
                     </TableCell>
                   </TableRow>
