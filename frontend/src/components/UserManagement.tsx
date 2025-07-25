@@ -69,15 +69,15 @@ export function UserManagement() {
       try {
         // Map UI filters to API filters
         const apiFilters: any = {};
-        if (filterObj.name) {
-          // Split name into name/surname for API
-          const [name, surname] = filterObj.name.split(" ");
-          if (name) apiFilters.name = name;
-          if (surname) apiFilters.surname = surname;
-        }
-        if (filterObj.status === "active") apiFilters.active = true;
-        else if (filterObj.status === "deactivated") apiFilters.active = false;
-        // Add more filters if needed
+        if (filterObj.id) apiFilters.id = filterObj.id;
+        if (filterObj.name) apiFilters.name = filterObj.name;
+        if (filterObj.status !== "all")
+          apiFilters.active = filterObj.status === "active";
+        if (filterObj.dateFrom)
+          apiFilters.createdAtFrom = format(filterObj.dateFrom, "yyyy-MM-dd");
+        if (filterObj.dateTo)
+          apiFilters.createdAtTo = format(filterObj.dateTo, "yyyy-MM-dd");
+
         const data = await fetchUsers(page, limit, apiFilters);
         setUsersPage(data);
       } catch (err) {

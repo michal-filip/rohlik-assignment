@@ -31,16 +31,18 @@ public class UserController {
   public Mono<PageResponseDTO<UserDTO>> findUsers(
       @RequestParam(value = "pageNumber", defaultValue = "0") int pageNumber,
       @RequestParam(value = "limit", defaultValue = "10") int limit,
+      @RequestParam(value = "id", required = false) String id,
       @RequestParam(value = "name", required = false) String name,
-      @RequestParam(value = "surname", required = false) String surname,
-      @RequestParam(value = "email", required = false) String email,
-      @RequestParam(value = "active", required = false) Boolean active
+      @RequestParam(value = "active", required = false) Boolean active,
+      @RequestParam(value = "createdAtFrom", required = false) String createdAtFrom,
+      @RequestParam(value = "createdAtTo", required = false) String createdAtTo
   ) {
     var filter = new UserFilterDTO();
+    filter.setId(id);
     filter.setName(name);
-    filter.setSurname(surname);
-    filter.setEmail(email);
     filter.setActive(active);
+    filter.setCreatedAtFrom(createdAtFrom);
+    filter.setCreatedAtTo(createdAtTo);
     return userService.findUsers(pageNumber, limit, filter);
   }
 

@@ -4,8 +4,9 @@ import lombok.Data;
 
 @Data
 public class UserFilterDTO {
+    private String id;
     private String name;
-    private String surname;
-    private String email;
     private Boolean active;
+    private String createdAtFrom;
+    private String createdAtTo;
 }
