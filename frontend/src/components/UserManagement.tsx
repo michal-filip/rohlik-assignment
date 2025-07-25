@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import {
   User,
@@ -18,7 +18,6 @@ import { NotificationSnackbar } from "./UserManagement/NotificationSnackbar";
 import { format } from "date-fns";
 
 export function UserManagement() {
-  // Snackbar state
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: "",
@@ -40,22 +39,37 @@ export function UserManagement() {
     },
   });
 
-  // Confirmation modal state
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
 
-  // Snackbar helpers
+  const [currentPage, setCurrentPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(5);
+  const [filters, setFilters] = useState({
+    id: "",
+    name: "",
+    status: "all",
+    dateFrom: null as Date | null,
+    dateTo: null as Date | null,
+  });
+  const [usersPage, setUsersPage] = useState<PaginatedResult<User>>({
+    content: [],
+    totalElements: 0,
+  });
+  const [isLoading, setIsLoading] = useState(false);
+  const [isError, setIsError] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+
   const showSnackbar = (
     message: string,
     severity: "success" | "info" | "warning" | "error" = "success"
   ) => {
     setSnackbar({ open: true, message, severity });
   };
+
   const handleCloseSnackbar = () => {
     setSnackbar((prev) => ({ ...prev, open: false }));
   };
 
-  // User status toggle
   const handleSetStatus = async (userId: string, active: boolean) => {
     try {
       await toggleUserActive(userId, active);
@@ -69,7 +83,6 @@ export function UserManagement() {
     }
   };
 
-  // Edit logic
   const handleEdit = (userId: string) => {
     const user = usersPage.content.find((u) => u.id === userId);
     if (user) {
@@ -90,11 +103,13 @@ export function UserManagement() {
   };
   const onEditSubmit = async (data: any) => {
     if (!userToEdit) return;
+
     // Convert status string to boolean
     const payload = {
       ...data,
       active: data.active === "active",
     };
+
     try {
       await updateUser(userToEdit.id, payload);
       showSnackbar("User updated successfully");
@@ -109,11 +124,11 @@ export function UserManagement() {
     }
   };
 
-  // Delete logic
   const handleDeleteRequest = (user: User) => {
     setUserToDelete(user);
     setConfirmOpen(true);
   };
+
   const handleDeleteConfirmed = async () => {
     if (!userToDelete) return;
     try {
@@ -133,12 +148,12 @@ export function UserManagement() {
       setUserToDelete(null);
     }
   };
+
   const handleDeleteCancel = () => {
     setConfirmOpen(false);
     setUserToDelete(null);
   };
 
-  // Pagination
   const handleChangePage = (event: unknown, newPage: number) => {
     setCurrentPage(newPage);
   };
@@ -149,7 +164,6 @@ export function UserManagement() {
     setCurrentPage(0);
   };
 
-  // Clear filters
   const clearFilters = () => {
     setFilters({
       id: "",
@@ -160,22 +174,6 @@ export function UserManagement() {
     });
     setCurrentPage(0);
   };
-  const [currentPage, setCurrentPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(5);
-  const [filters, setFilters] = useState({
-    id: "",
-    name: "",
-    status: "all",
-    dateFrom: null as Date | null,
-    dateTo: null as Date | null,
-  });
-  const [usersPage, setUsersPage] = useState<PaginatedResult<User>>({
-    content: [],
-    totalElements: 0,
-  });
-  const [isLoading, setIsLoading] = useState(false);
-  const [isError, setIsError] = useState(false);
-  const [error, setError] = useState<unknown>(null);
 
   // Debounced fetch function using lodash.debounce
   const debouncedFetchRef = useRef<any>(null);
@@ -195,7 +193,7 @@ export function UserManagement() {
           apiFilters.createdAtFrom = format(filterObj.dateFrom, "yyyy-MM-dd");
         if (filterObj.dateTo)
           apiFilters.createdAtTo = format(filterObj.dateTo, "yyyy-MM-dd");
-        // You may want to call your API here
+
         const result = await fetchUsers(page, limit, apiFilters);
         setUsersPage(result);
         setIsLoading(false);
@@ -211,8 +209,7 @@ export function UserManagement() {
     [currentPage, rowsPerPage, filters]
   );
 
-  // Initial fetch
-  React.useEffect(() => {
+  useEffect(() => {
     debouncedFetchRef.current = fetchAndSetUsers;
     debouncedFetchRef.current();
   }, [rowsPerPage, currentPage, filters]);
@@ -228,14 +225,12 @@ export function UserManagement() {
         </Typography>
       </Box>
 
-      {/* Filters */}
       <UserFilters
         filters={filters}
         setFilters={setFilters}
         clearFilters={clearFilters}
       />
 
-      {/* Results Summary */}
       <Box
         sx={{
           display: "flex",
