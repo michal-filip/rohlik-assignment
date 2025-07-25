@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
+import debounce from "lodash.debounce";
 import {
   fetchUsers,
   toggleUserActive,
@@ -6,7 +7,6 @@ import {
   User,
   PaginatedResult,
 } from "../api/user";
-import { useQuery } from "@tanstack/react-query";
 import {
   Box,
   Paper,
@@ -44,19 +44,6 @@ import { format } from "date-fns";
 export function UserManagement() {
   const [currentPage, setCurrentPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(5);
-  const {
-    data: usersPage = {
-      content: [],
-      totalElements: 0,
-    } as PaginatedResult<User>,
-    isLoading,
-    isError,
-    error,
-    refetch,
-  } = useQuery<PaginatedResult<User>>({
-    queryKey: ["users", currentPage, rowsPerPage],
-    queryFn: () => fetchUsers(currentPage, rowsPerPage),
-  });
   const [filters, setFilters] = useState({
     id: "",
     name: "",
@@ -64,6 +51,62 @@ export function UserManagement() {
     dateFrom: null as Date | null,
     dateTo: null as Date | null,
   });
+  const [usersPage, setUsersPage] = useState<PaginatedResult<User>>({
+    content: [],
+    totalElements: 0,
+  });
+  const [isLoading, setIsLoading] = useState(false);
+  const [isError, setIsError] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+
+  // Debounced fetch function using lodash.debounce
+  const debouncedFetchRef = useRef<any>(null);
+  const fetchAndSetUsers = useCallback(
+    async (page = currentPage, limit = rowsPerPage, filterObj = filters) => {
+      setIsLoading(true);
+      setIsError(false);
+      setError(null);
+      try {
+        // Map UI filters to API filters
+        const apiFilters: any = {};
+        if (filterObj.name) {
+          // Split name into name/surname for API
+          const [name, surname] = filterObj.name.split(" ");
+          if (name) apiFilters.name = name;
+          if (surname) apiFilters.surname = surname;
+        }
+        if (filterObj.status === "active") apiFilters.active = true;
+        else if (filterObj.status === "deactivated") apiFilters.active = false;
+        // Add more filters if needed
+        const data = await fetchUsers(page, limit, apiFilters);
+        setUsersPage(data);
+      } catch (err) {
+        setIsError(true);
+        setError(err);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [currentPage, rowsPerPage, filters]
+  );
+
+  // Debounce with lodash
+  if (!debouncedFetchRef.current) {
+    debouncedFetchRef.current = debounce(fetchAndSetUsers, 400);
+  }
+
+  // Call API on text filter change
+  useEffect(() => {
+    debouncedFetchRef.current(currentPage, rowsPerPage, filters);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.id, filters.name, filters.dateFrom, filters.dateTo]);
+
+  // Call API immediately for non-text filters
+  useEffect(() => {
+    fetchAndSetUsers(currentPage, rowsPerPage, filters);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.status, currentPage, rowsPerPage]);
+
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: "",
@@ -112,7 +155,7 @@ export function UserManagement() {
     try {
       await toggleUserActive(userId, active);
       showSnackbar("User status updated");
-      refetch();
+      fetchAndSetUsers();
     } catch (err) {
       showSnackbar(
         err instanceof Error ? err.message : "Failed to update user status",
@@ -129,7 +172,7 @@ export function UserManagement() {
     try {
       await deleteUser(userId);
       showSnackbar("User deleted");
-      refetch();
+      fetchAndSetUsers();
       if (usersPage.content.length === 1 && currentPage > 0) {
         setCurrentPage(0);
       }
@@ -162,24 +205,6 @@ export function UserManagement() {
     });
     setCurrentPage(0);
   };
-
-  if (isLoading) {
-    return (
-      <Box sx={{ p: 3 }}>
-        <Typography>Loading users...</Typography>
-      </Box>
-    );
-  }
-  if (isError) {
-    return (
-      <Box sx={{ p: 3 }}>
-        <Typography color="error">
-          Error loading users:{" "}
-          {error instanceof Error ? error.message : "Unknown error"}
-        </Typography>
-      </Box>
-    );
-  }
 
   return (
     <Box sx={{ p: 3 }}>
@@ -299,93 +324,108 @@ export function UserManagement() {
         </Typography>
       </Box>
 
-      {/* Users Table */}
-      <Paper>
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>ID</TableCell>
-                <TableCell>Name</TableCell>
-                <TableCell>Surname</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Email</TableCell>
-                <TableCell>Telephone</TableCell>
-                <TableCell>Creation Date</TableCell>
-                <TableCell>Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {usersPage.content.map((user) => (
-                <TableRow key={user.id} hover>
-                  <TableCell>{user.id}</TableCell>
-                  <TableCell>{user.name}</TableCell>
-                  <TableCell>{user.surname}</TableCell>
-                  <TableCell>
-                    <Chip
-                      label={user.active ? "Active" : "Deactivated"}
-                      color={user.active ? "success" : "default"}
-                      size="small"
-                    />
-                  </TableCell>
-                  <TableCell>{user.email}</TableCell>
-                  <TableCell>{user.phoneNumber}</TableCell>
-                  <TableCell>
-                    {format(new Date(user.createdAt), "PP")}
-                  </TableCell>
-                  <TableCell>
-                    <Box sx={{ display: "flex", gap: 1 }}>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleSetStatus(user.id, !user.active)}
-                        color={user.active ? "error" : "success"}
-                        title={user.active ? "Deactivate" : "Activate"}
-                      >
-                        <PowerIcon />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleEdit(user.id)}
-                        color="primary"
-                        title="Edit"
-                      >
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleDelete(user.id)}
-                        color="error"
-                        title="Delete"
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    </Box>
-                  </TableCell>
+      {isLoading && (
+        <Box sx={{ p: 3 }}>
+          <Typography>Loading users...</Typography>
+        </Box>
+      )}
+      {isError && (
+        <Box sx={{ p: 3 }}>
+          <Typography color="error">
+            Error loading users:{" "}
+            {error instanceof Error ? error.message : "Unknown error"}
+          </Typography>
+        </Box>
+      )}
+
+      {!isLoading && !isError && (
+        <Paper>
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>ID</TableCell>
+                  <TableCell>Name</TableCell>
+                  <TableCell>Surname</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell>Email</TableCell>
+                  <TableCell>Telephone</TableCell>
+                  <TableCell>Creation Date</TableCell>
+                  <TableCell>Actions</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+              </TableHead>
+              <TableBody>
+                {usersPage.content.map((user) => (
+                  <TableRow key={user.id} hover>
+                    <TableCell>{user.id}</TableCell>
+                    <TableCell>{user.name}</TableCell>
+                    <TableCell>{user.surname}</TableCell>
+                    <TableCell>
+                      <Chip
+                        label={user.active ? "Active" : "Deactivated"}
+                        color={user.active ? "success" : "default"}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell>{user.email}</TableCell>
+                    <TableCell>{user.phoneNumber}</TableCell>
+                    <TableCell>
+                      {format(new Date(user.createdAt), "PP")}
+                    </TableCell>
+                    <TableCell>
+                      <Box sx={{ display: "flex", gap: 1 }}>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleSetStatus(user.id, !user.active)}
+                          color={user.active ? "error" : "success"}
+                          title={user.active ? "Deactivate" : "Activate"}
+                        >
+                          <PowerIcon />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleEdit(user.id)}
+                          color="primary"
+                          title="Edit"
+                        >
+                          <EditIcon />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleDelete(user.id)}
+                          color="error"
+                          title="Delete"
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Box>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
 
-        {usersPage.totalElements === 0 && (
-          <Box sx={{ p: 4, textAlign: "center" }}>
-            <Typography color="text.secondary">
-              No users found matching the current filters.
-            </Typography>
-          </Box>
-        )}
+          {usersPage.totalElements === 0 && (
+            <Box sx={{ p: 4, textAlign: "center" }}>
+              <Typography color="text.secondary">
+                No users found matching the current filters.
+              </Typography>
+            </Box>
+          )}
 
-        {/* Pagination */}
-        <TablePagination
-          component="div"
-          count={usersPage.totalElements}
-          page={currentPage}
-          onPageChange={handleChangePage}
-          rowsPerPage={rowsPerPage}
-          onRowsPerPageChange={handleChangeRowsPerPage}
-          rowsPerPageOptions={[5, 10, 25, 50]}
-        />
-      </Paper>
+          {/* Pagination */}
+          <TablePagination
+            component="div"
+            count={usersPage.totalElements}
+            page={currentPage}
+            onPageChange={handleChangePage}
+            rowsPerPage={rowsPerPage}
+            onRowsPerPageChange={handleChangeRowsPerPage}
+            rowsPerPageOptions={[5, 10, 25, 50]}
+          />
+        </Paper>
+      )}
 
       {/* Snackbar for notifications */}
       <Snackbar

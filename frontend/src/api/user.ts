@@ -13,12 +13,12 @@ export type PaginatedResult<T> = {
   totalElements: number;
 };
 
-
 export type UserFilters = {
+  id?: string;
   name?: string;
-  surname?: string;
-  email?: string;
   active?: boolean;
+  createdAtFrom?: string;
+  createdAtTo?: string;
 };
 
 export async function fetchUsers(
@@ -30,10 +30,15 @@ export async function fetchUsers(
     pageNumber: pageNumber.toString(),
     limit: limit.toString(),
   });
+
+  if (filters.id) params.append("id", filters.id);
   if (filters.name) params.append("name", filters.name);
-  if (filters.surname) params.append("surname", filters.surname);
-  if (filters.email) params.append("email", filters.email);
-  if (typeof filters.active === "boolean") params.append("active", String(filters.active));
+  if (typeof filters.active === "boolean")
+    params.append("active", String(filters.active));
+  if (filters.createdAtFrom)
+    params.append("createdAtFrom", filters.createdAtFrom);
+  if (filters.createdAtTo) params.append("createdAtTo", filters.createdAtTo);
+
   const res = await fetch(`http://localhost:8090/api/users?${params}`);
   if (!res.ok) throw new Error("Failed to fetch users");
   return res.json();
