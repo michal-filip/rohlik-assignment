@@ -68,3 +68,27 @@ export async function deleteUser(userId: string): Promise<void> {
     throw new Error("Failed to delete user");
   }
 }
+
+export type UpdateUserPayload = {
+  name?: string;
+  surname?: string;
+  email?: string;
+  phoneNumber?: string;
+  active?: boolean;
+};
+
+export async function updateUser(
+  userId: string,
+  payload: UpdateUserPayload
+): Promise<void> {
+  const res = await fetch(`http://localhost:8090/api/users/${userId}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    throw new Error("Failed to update user");
+  }
+}

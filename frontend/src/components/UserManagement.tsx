@@ -1,9 +1,11 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
+import { useForm } from "react-hook-form";
 import debounce from "lodash.debounce";
 import {
   fetchUsers,
   toggleUserActive,
   deleteUser,
+  updateUser,
   User,
   PaginatedResult,
 } from "../api/user";
@@ -114,36 +116,29 @@ export function UserManagement() {
     severity: "success" as "success" | "info" | "warning" | "error",
   });
 
+  // Edit modal state
+  const [editOpen, setEditOpen] = useState(false);
+  const [userToEdit, setUserToEdit] = useState<User | null>(null);
+
+  // Form for editing user
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm({
+    defaultValues: {
+      name: "",
+      surname: "",
+      email: "",
+      phoneNumber: "",
+      active: true,
+    },
+  });
+
   // Confirmation modal state
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
-
-  // Filter users based on current filters
-  // const filteredUsers = useMemo(() => {
-  //   return users.filter((user) => {
-  //     const matchesId =
-  //       !filters.id || user.id.toLowerCase().includes(filters.id.toLowerCase());
-  //     const matchesName =
-  //       !filters.name ||
-  //       user.name.toLowerCase().includes(filters.name.toLowerCase()) ||
-  //       user.surname.toLowerCase().includes(filters.name.toLowerCase());
-  //     const matchesStatus =
-  //       filters.status === "all" ||
-  //       user.active === (filters.status === "active");
-  //     const matchesDateFrom =
-  //       !filters.dateFrom || new Date(user.createdAt) >= filters.dateFrom;
-  //     const matchesDateTo =
-  //       !filters.dateTo || new Date(user.createdAt) <= filters.dateTo;
-
-  //     return (
-  //       matchesId &&
-  //       matchesName &&
-  //       matchesStatus &&
-  //       matchesDateFrom &&
-  //       matchesDateTo
-  //     );
-  //   });
-  // }, [mergedUsers, filters]);
 
   const showSnackbar = (
     message: string,
@@ -170,7 +165,44 @@ export function UserManagement() {
   };
 
   const handleEdit = (userId: string) => {
-    showSnackbar(`Edit user ${userId} - Feature coming soon`, "info");
+    const user = usersPage.content.find((u) => u.id === userId);
+    if (user) {
+      setUserToEdit(user);
+      reset({
+        name: user.name,
+        surname: user.surname,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        active: user.active,
+      });
+      setEditOpen(true);
+    }
+  };
+
+  const handleEditClose = () => {
+    setEditOpen(false);
+    setUserToEdit(null);
+  };
+
+  const onEditSubmit = async (data: any) => {
+    if (!userToEdit) return;
+    // Convert status string to boolean
+    const payload = {
+      ...data,
+      active: data.active === "active",
+    };
+    try {
+      await updateUser(userToEdit.id, payload);
+      showSnackbar("User updated successfully");
+      fetchAndSetUsers();
+      setEditOpen(false);
+      setUserToEdit(null);
+    } catch (err) {
+      showSnackbar(
+        err instanceof Error ? err.message : "Failed to update user",
+        "error"
+      );
+    }
   };
 
   // Show confirmation modal before deleting
@@ -465,6 +497,135 @@ export function UserManagement() {
               </TableBody>
             </Table>
           </TableContainer>
+
+          {/* Edit User Modal */}
+          <Dialog
+            open={editOpen}
+            onClose={handleEditClose}
+            maxWidth="sm"
+            fullWidth
+          >
+            <Box
+              component="form"
+              onSubmit={handleSubmit(onEditSubmit)}
+              sx={{ p: 3 }}
+            >
+              <Typography variant="h6" gutterBottom>
+                Edit User
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="Name"
+                    fullWidth
+                    {...register("name", {
+                      required: "Name is required",
+                      maxLength: {
+                        value: 100,
+                        message: "Name cannot exceed 100 characters",
+                      },
+                    })}
+                    error={!!errors.name}
+                    helperText={errors.name?.message}
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="Surname"
+                    fullWidth
+                    {...register("surname", {
+                      required: "Surname is required",
+                      maxLength: {
+                        value: 100,
+                        message: "Surname cannot exceed 100 characters",
+                      },
+                    })}
+                    error={!!errors.surname}
+                    helperText={errors.surname?.message}
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="Email"
+                    fullWidth
+                    {...register("email", {
+                      required: "Email is required",
+                      pattern: {
+                        value: /^[^@\s]+@[^@\s]+\.[^@\s]+$/,
+                        message: "Invalid email address",
+                      },
+                      maxLength: {
+                        value: 200,
+                        message: "Email cannot exceed 200 characters",
+                      },
+                    })}
+                    error={!!errors.email}
+                    helperText={errors.email?.message}
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="Phone Number"
+                    fullWidth
+                    {...register("phoneNumber", {
+                      required: "Phone number is required",
+                      maxLength: {
+                        value: 30,
+                        message: "Phone number cannot exceed 30 characters",
+                      },
+                    })}
+                    error={!!errors.phoneNumber}
+                    helperText={errors.phoneNumber?.message}
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <FormControl fullWidth>
+                    <InputLabel>Status</InputLabel>
+                    <Select
+                      label="Status"
+                      defaultValue={
+                        userToEdit?.active ? "active" : "deactivated"
+                      }
+                      {...register("active")}
+                      onChange={(e) => {
+                        reset((prev) => ({
+                          ...prev,
+                          active: e.target.value === "active",
+                        }));
+                      }}
+                    >
+                      <MenuItem value="active">Active</MenuItem>
+                      <MenuItem value="deactivated">Deactivated</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+              </Grid>
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: 2,
+                  mt: 3,
+                }}
+              >
+                <Button
+                  onClick={handleEditClose}
+                  variant="outlined"
+                  color="primary"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="contained"
+                  color="success"
+                  disabled={isSubmitting}
+                >
+                  Save
+                </Button>
+              </Box>
+            </Box>
+          </Dialog>
 
           {usersPage.totalElements === 0 && (
             <Box sx={{ p: 4, textAlign: "center" }}>

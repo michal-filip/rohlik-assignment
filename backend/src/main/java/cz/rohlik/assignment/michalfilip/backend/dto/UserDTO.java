@@ -9,6 +9,5 @@ import lombok.EqualsAndHashCode;
 @EqualsAndHashCode(callSuper = true)
 public class UserDTO extends UserBaseDTO {
   private UUID id;
-  private boolean active;
   private Date createdAt;
 }
