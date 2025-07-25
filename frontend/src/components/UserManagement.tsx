@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   Box,
   Paper,
@@ -33,112 +34,35 @@ import {
 } from "@mui/icons-material";
 import { format } from "date-fns";
 
-interface User {
+type User = {
   id: string;
   name: string;
   surname: string;
-  status: "active" | "deactivated";
+  active: boolean;
   email: string;
-  telephone: string;
-  creationDate: Date;
+  phoneNumber: string;
+  createdAt: string;
+};
+
+// Fetch users from backend
+async function fetchUsers(): Promise<User[]> {
+  const res = await fetch("http://localhost:8090/api/users");
+  if (!res.ok) throw new Error("Failed to fetch users");
+  return res.json();
 }
 
-// Mock data
-const mockUsers: User[] = [
-  {
-    id: "001",
-    name: "John",
-    surname: "Doe",
-    status: "active",
-    email: "john.doe@example.com",
-    telephone: "+1 (555) 123-4567",
-    creationDate: new Date("2024-01-15"),
-  },
-  {
-    id: "002",
-    name: "Jane",
-    surname: "Smith",
-    status: "active",
-    email: "jane.smith@example.com",
-    telephone: "+1 (555) 234-5678",
-    creationDate: new Date("2024-02-20"),
-  },
-  {
-    id: "003",
-    name: "Bob",
-    surname: "Johnson",
-    status: "deactivated",
-    email: "bob.johnson@example.com",
-    telephone: "+1 (555) 345-6789",
-    creationDate: new Date("2024-01-10"),
-  },
-  {
-    id: "004",
-    name: "Alice",
-    surname: "Williams",
-    status: "active",
-    email: "alice.williams@example.com",
-    telephone: "+1 (555) 456-7890",
-    creationDate: new Date("2024-03-05"),
-  },
-  {
-    id: "005",
-    name: "Charlie",
-    surname: "Brown",
-    status: "deactivated",
-    email: "charlie.brown@example.com",
-    telephone: "+1 (555) 567-8901",
-    creationDate: new Date("2023-12-15"),
-  },
-  {
-    id: "006",
-    name: "Diana",
-    surname: "Davis",
-    status: "active",
-    email: "diana.davis@example.com",
-    telephone: "+1 (555) 678-9012",
-    creationDate: new Date("2024-02-28"),
-  },
-  {
-    id: "007",
-    name: "Frank",
-    surname: "Miller",
-    status: "active",
-    email: "frank.miller@example.com",
-    telephone: "+1 (555) 789-0123",
-    creationDate: new Date("2024-01-25"),
-  },
-  {
-    id: "008",
-    name: "Grace",
-    surname: "Wilson",
-    status: "deactivated",
-    email: "grace.wilson@example.com",
-    telephone: "+1 (555) 890-1234",
-    creationDate: new Date("2023-11-30"),
-  },
-  {
-    id: "009",
-    name: "Henry",
-    surname: "Taylor",
-    status: "active",
-    email: "henry.taylor@example.com",
-    telephone: "+1 (555) 901-2345",
-    creationDate: new Date("2024-03-10"),
-  },
-  {
-    id: "010",
-    name: "Ivy",
-    surname: "Anderson",
-    status: "active",
-    email: "ivy.anderson@example.com",
-    telephone: "+1 (555) 012-3456",
-    creationDate: new Date("2024-02-14"),
-  },
-];
-
 export function UserManagement() {
-  const [users, setUsers] = useState<User[]>(mockUsers);
+  const {
+    data: users = [],
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery<User[]>({
+    queryKey: ["users"],
+    queryFn: fetchUsers,
+  });
+  const [usersState, setUsersState] = useState<User[]>([]); // for local status/delete only
   const [filters, setFilters] = useState({
     id: "",
     name: "",
@@ -154,9 +78,17 @@ export function UserManagement() {
     severity: "success" as "success" | "info" | "warning" | "error",
   });
 
+  // Merge server data with local state for status/delete (optimistic UI)
+  const mergedUsers = useMemo(() => {
+    if (usersState.length === 0) return users;
+    // Apply local changes (status toggles, deletions)
+    const ids = new Set(usersState.map((u) => u.id));
+    return [...usersState, ...users.filter((u) => !ids.has(u.id))];
+  }, [users, usersState]);
+
   // Filter users based on current filters
   const filteredUsers = useMemo(() => {
-    return users.filter((user) => {
+    return mergedUsers.filter((user) => {
       const matchesId =
         !filters.id || user.id.toLowerCase().includes(filters.id.toLowerCase());
       const matchesName =
@@ -164,11 +96,12 @@ export function UserManagement() {
         user.name.toLowerCase().includes(filters.name.toLowerCase()) ||
         user.surname.toLowerCase().includes(filters.name.toLowerCase());
       const matchesStatus =
-        filters.status === "all" || user.status === filters.status;
+        filters.status === "all" ||
+        user.active === (filters.status === "active");
       const matchesDateFrom =
-        !filters.dateFrom || user.creationDate >= filters.dateFrom;
+        !filters.dateFrom || new Date(user.createdAt) >= filters.dateFrom;
       const matchesDateTo =
-        !filters.dateTo || user.creationDate <= filters.dateTo;
+        !filters.dateTo || new Date(user.createdAt) <= filters.dateTo;
 
       return (
         matchesId &&
@@ -178,7 +111,7 @@ export function UserManagement() {
         matchesDateTo
       );
     });
-  }, [users, filters]);
+  }, [mergedUsers, filters]);
 
   // Paginate filtered users
   const paginatedUsers = filteredUsers.slice(
@@ -198,17 +131,30 @@ export function UserManagement() {
   };
 
   const handleStatusToggle = (userId: string) => {
-    setUsers((prevUsers) =>
-      prevUsers.map((user) =>
+    setUsersState((prev) =>
+      prev.map((user) =>
         user.id === userId
           ? {
               ...user,
-              status: user.status === "active" ? "deactivated" : "active",
+              status: user.active ? "deactivated" : "active",
             }
           : user
       )
     );
-    showSnackbar("User status updated successfully");
+    // If not in local state, update from server data
+    if (!usersState.some((u) => u.id === userId)) {
+      const user = users.find((u) => u.id === userId);
+      if (user) {
+        setUsersState((prev) => [
+          ...prev,
+          {
+            ...user,
+            status: user.active ? "deactivated" : "active",
+          },
+        ]);
+      }
+    }
+    showSnackbar("User status updated locally (not persisted)");
   };
 
   const handleEdit = (userId: string) => {
@@ -216,9 +162,17 @@ export function UserManagement() {
   };
 
   const handleDelete = (userId: string) => {
-    setUsers((prevUsers) => prevUsers.filter((user) => user.id !== userId));
-    showSnackbar("User deleted successfully");
-    // Reset to first page if current page becomes empty
+    setUsersState((prev) => prev.filter((user) => user.id !== userId));
+    // If not in local state, add all except deleted
+    if (!usersState.some((u) => u.id === userId)) {
+      setUsersState((prev) => [
+        ...prev,
+        ...users.filter(
+          (u) => u.id !== userId && !prev.some((pu) => pu.id === u.id)
+        ),
+      ]);
+    }
+    showSnackbar("User deleted locally (not persisted)");
     if (paginatedUsers.length === 1 && currentPage > 0) {
       setCurrentPage(0);
     }
@@ -245,6 +199,24 @@ export function UserManagement() {
     });
     setCurrentPage(0);
   };
+
+  if (isLoading) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Typography>Loading users...</Typography>
+      </Box>
+    );
+  }
+  if (isError) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Typography color="error">
+          Error loading users:{" "}
+          {error instanceof Error ? error.message : "Unknown error"}
+        </Typography>
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ p: 3 }}>
@@ -388,25 +360,23 @@ export function UserManagement() {
                   <TableCell>{user.surname}</TableCell>
                   <TableCell>
                     <Chip
-                      label={
-                        user.status === "active" ? "Active" : "Deactivated"
-                      }
-                      color={user.status === "active" ? "success" : "default"}
+                      label={user.active ? "Active" : "Deactivated"}
+                      color={user.active ? "success" : "default"}
                       size="small"
                     />
                   </TableCell>
                   <TableCell>{user.email}</TableCell>
-                  <TableCell>{user.telephone}</TableCell>
-                  <TableCell>{format(user.creationDate, "PP")}</TableCell>
+                  <TableCell>{user.phoneNumber}</TableCell>
+                  <TableCell>
+                    {format(new Date(user.createdAt), "PP")}
+                  </TableCell>
                   <TableCell>
                     <Box sx={{ display: "flex", gap: 1 }}>
                       <IconButton
                         size="small"
                         onClick={() => handleStatusToggle(user.id)}
-                        color={user.status === "active" ? "error" : "success"}
-                        title={
-                          user.status === "active" ? "Deactivate" : "Activate"
-                        }
+                        color={user.active ? "error" : "success"}
+                        title={user.active ? "Deactivate" : "Activate"}
                       >
                         <PowerIcon />
                       </IconButton>
