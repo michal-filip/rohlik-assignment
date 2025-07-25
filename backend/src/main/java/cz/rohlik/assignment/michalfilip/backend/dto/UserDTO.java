@@ -3,14 +3,12 @@ package cz.rohlik.assignment.michalfilip.backend.dto;
 import java.util.Date;
 import java.util.UUID;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 @Data
-public class UserDTO {
+@EqualsAndHashCode(callSuper = true)
+public class UserDTO extends UserBaseDTO {
   private UUID id;
-  private String name;
-  private String surname;
-  private String email;
-  private String phoneNumber;
   private boolean active;
   private Date createdAt;
 }

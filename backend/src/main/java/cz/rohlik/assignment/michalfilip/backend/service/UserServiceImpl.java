@@ -1,6 +1,6 @@
+  package cz.rohlik.assignment.michalfilip.backend.service;
 
-package cz.rohlik.assignment.michalfilip.backend.service;
-
+import cz.rohlik.assignment.michalfilip.backend.dto.UserUpdateDTO;
 import org.springframework.transaction.annotation.Transactional;
 import cz.rohlik.assignment.michalfilip.backend.dto.PageResponseDTO;
 import cz.rohlik.assignment.michalfilip.backend.dto.UserDTO;
@@ -28,6 +28,19 @@ public class UserServiceImpl implements UserService {
         .zipWith(Mono.fromCallable(() -> userRepository.count()))
         .subscribeOn(jdbcScheduler)
         .map(tuple -> new PageResponseDTO<UserDTO>(tuple.getT1(), tuple.getT2().longValue()));
+  }
+
+  @Override
+  @Transactional
+  public Mono<Void> updateUser(UUID id, UserUpdateDTO dto) {
+    return Mono.fromRunnable(() -> {
+      var userOpt = userRepository.findById(id);
+      if (userOpt.isPresent()) {
+        var user = userOpt.get();
+        var updatedUser = userMapper.updateUser(user, dto);
+        userRepository.save(updatedUser);
+      }
+    }).subscribeOn(jdbcScheduler).then();
   }
 
   @Override

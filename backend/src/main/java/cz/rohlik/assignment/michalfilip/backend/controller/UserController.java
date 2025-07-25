@@ -4,7 +4,9 @@ package cz.rohlik.assignment.michalfilip.backend.controller;
 import cz.rohlik.assignment.michalfilip.backend.dto.PageResponseDTO;
 import cz.rohlik.assignment.michalfilip.backend.dto.UserActiveDTO;
 import cz.rohlik.assignment.michalfilip.backend.dto.UserDTO;
+import cz.rohlik.assignment.michalfilip.backend.dto.UserUpdateDTO;
 import cz.rohlik.assignment.michalfilip.backend.service.UserService;
+import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -26,6 +28,11 @@ public class UserController {
   @GetMapping
   public Mono<PageResponseDTO<UserDTO>> findUsers() {
     return userService.findUsers();
+  }
+
+  @PutMapping("/{id}")
+  public Mono<Void> updateUser(@PathVariable("id") UUID id, @RequestBody @Valid UserUpdateDTO dto) {
+    return userService.updateUser(id, dto);
   }
 
   @PutMapping("/{id}/active")
