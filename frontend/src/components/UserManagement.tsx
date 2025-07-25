@@ -1,50 +1,165 @@
-import React, { useState, useRef, useCallback, useEffect } from "react";
+import React, { useState, useRef, useCallback } from "react";
 import { useForm } from "react-hook-form";
-import debounce from "lodash.debounce";
 import {
-  fetchUsers,
-  toggleUserActive,
-  deleteUser,
-  updateUser,
   User,
   PaginatedResult,
+  fetchUsers,
+  deleteUser,
+  updateUser,
+  toggleUserActive,
 } from "../api/user";
-import {
-  Box,
-  Paper,
-  Typography,
-  TextField,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
-  Button,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Chip,
-  TablePagination,
-  IconButton,
-  Grid,
-  Card,
-  CardContent,
-  Snackbar,
-  Alert,
-  Dialog,
-} from "@mui/material";
+import { Box, Paper, Typography, TablePagination } from "@mui/material";
+import { UserFilters } from "./UserManagement/UserFilters";
+import { UserTable } from "./UserManagement/UserTable";
+import { UserEditDialog } from "./UserManagement/UserEditDialog";
+import { UserDeleteDialog } from "./UserManagement/UserDeleteDialog";
+import { NotificationSnackbar } from "./UserManagement/NotificationSnackbar";
 
-import {
-  Edit as EditIcon,
-  Delete as DeleteIcon,
-  PowerSettingsNew as PowerIcon,
-  Clear as ClearIcon,
-} from "@mui/icons-material";
 import { format } from "date-fns";
 
 export function UserManagement() {
+  // Snackbar state
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: "",
+    severity: "success" as "success" | "info" | "warning" | "error",
+  });
+
+  // Edit modal state
+  const [editOpen, setEditOpen] = useState(false);
+  const [userToEdit, setUserToEdit] = useState<User | null>(null);
+
+  // Form for editing user
+  const form = useForm({
+    defaultValues: {
+      name: "",
+      surname: "",
+      email: "",
+      phoneNumber: "",
+      active: true,
+    },
+  });
+
+  // Confirmation modal state
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
+
+  // Snackbar helpers
+  const showSnackbar = (
+    message: string,
+    severity: "success" | "info" | "warning" | "error" = "success"
+  ) => {
+    setSnackbar({ open: true, message, severity });
+  };
+  const handleCloseSnackbar = () => {
+    setSnackbar((prev) => ({ ...prev, open: false }));
+  };
+
+  // User status toggle
+  const handleSetStatus = async (userId: string, active: boolean) => {
+    try {
+      await toggleUserActive(userId, active);
+      showSnackbar("User status updated");
+      fetchAndSetUsers();
+    } catch (err) {
+      showSnackbar(
+        err instanceof Error ? err.message : "Failed to update user status",
+        "error"
+      );
+    }
+  };
+
+  // Edit logic
+  const handleEdit = (userId: string) => {
+    const user = usersPage.content.find((u) => u.id === userId);
+    if (user) {
+      setUserToEdit(user);
+      form.reset({
+        name: user.name,
+        surname: user.surname,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        active: user.active,
+      });
+      setEditOpen(true);
+    }
+  };
+  const handleEditClose = () => {
+    setEditOpen(false);
+    setUserToEdit(null);
+  };
+  const onEditSubmit = async (data: any) => {
+    if (!userToEdit) return;
+    // Convert status string to boolean
+    const payload = {
+      ...data,
+      active: data.active === "active",
+    };
+    try {
+      await updateUser(userToEdit.id, payload);
+      showSnackbar("User updated successfully");
+      fetchAndSetUsers();
+      setEditOpen(false);
+      setUserToEdit(null);
+    } catch (err) {
+      showSnackbar(
+        err instanceof Error ? err.message : "Failed to update user",
+        "error"
+      );
+    }
+  };
+
+  // Delete logic
+  const handleDeleteRequest = (user: User) => {
+    setUserToDelete(user);
+    setConfirmOpen(true);
+  };
+  const handleDeleteConfirmed = async () => {
+    if (!userToDelete) return;
+    try {
+      await deleteUser(userToDelete.id);
+      showSnackbar("User deleted");
+      fetchAndSetUsers();
+      if (usersPage.content.length === 1 && currentPage > 0) {
+        setCurrentPage(0);
+      }
+    } catch (err) {
+      showSnackbar(
+        err instanceof Error ? err.message : "Failed to delete user",
+        "error"
+      );
+    } finally {
+      setConfirmOpen(false);
+      setUserToDelete(null);
+    }
+  };
+  const handleDeleteCancel = () => {
+    setConfirmOpen(false);
+    setUserToDelete(null);
+  };
+
+  // Pagination
+  const handleChangePage = (event: unknown, newPage: number) => {
+    setCurrentPage(newPage);
+  };
+  const handleChangeRowsPerPage = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setCurrentPage(0);
+  };
+
+  // Clear filters
+  const clearFilters = () => {
+    setFilters({
+      id: "",
+      name: "",
+      status: "all",
+      dateFrom: null,
+      dateTo: null,
+    });
+    setCurrentPage(0);
+  };
   const [currentPage, setCurrentPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(5);
   const [filters, setFilters] = useState({
@@ -80,9 +195,12 @@ export function UserManagement() {
           apiFilters.createdAtFrom = format(filterObj.dateFrom, "yyyy-MM-dd");
         if (filterObj.dateTo)
           apiFilters.createdAtTo = format(filterObj.dateTo, "yyyy-MM-dd");
-
-        const data = await fetchUsers(page, limit, apiFilters);
-        setUsersPage(data);
+        // You may want to call your API here
+        const result = await fetchUsers(page, limit, apiFilters);
+        setUsersPage(result);
+        setIsLoading(false);
+        setIsError(false);
+        setError(null);
       } catch (err) {
         setIsError(true);
         setError(err);
@@ -93,172 +211,11 @@ export function UserManagement() {
     [currentPage, rowsPerPage, filters]
   );
 
-  // Debounce with lodash
-  if (!debouncedFetchRef.current) {
-    debouncedFetchRef.current = debounce(fetchAndSetUsers, 400);
-  }
-
-  // Call API on text filter change
-  useEffect(() => {
-    debouncedFetchRef.current(currentPage, rowsPerPage, filters);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.id, filters.name, filters.dateFrom, filters.dateTo]);
-
-  // Call API immediately for non-text filters
-  useEffect(() => {
-    fetchAndSetUsers(currentPage, rowsPerPage, filters);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.status, currentPage, rowsPerPage]);
-
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: "",
-    severity: "success" as "success" | "info" | "warning" | "error",
-  });
-
-  // Edit modal state
-  const [editOpen, setEditOpen] = useState(false);
-  const [userToEdit, setUserToEdit] = useState<User | null>(null);
-
-  // Form for editing user
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors, isSubmitting },
-  } = useForm({
-    defaultValues: {
-      name: "",
-      surname: "",
-      email: "",
-      phoneNumber: "",
-      active: true,
-    },
-  });
-
-  // Confirmation modal state
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [userToDelete, setUserToDelete] = useState<User | null>(null);
-
-  const showSnackbar = (
-    message: string,
-    severity: "success" | "info" | "warning" | "error" = "success"
-  ) => {
-    setSnackbar({ open: true, message, severity });
-  };
-
-  const handleCloseSnackbar = () => {
-    setSnackbar((prev) => ({ ...prev, open: false }));
-  };
-
-  const handleSetStatus = async (userId: string, active: boolean) => {
-    try {
-      await toggleUserActive(userId, active);
-      showSnackbar("User status updated");
-      fetchAndSetUsers();
-    } catch (err) {
-      showSnackbar(
-        err instanceof Error ? err.message : "Failed to update user status",
-        "error"
-      );
-    }
-  };
-
-  const handleEdit = (userId: string) => {
-    const user = usersPage.content.find((u) => u.id === userId);
-    if (user) {
-      setUserToEdit(user);
-      reset({
-        name: user.name,
-        surname: user.surname,
-        email: user.email,
-        phoneNumber: user.phoneNumber,
-        active: user.active,
-      });
-      setEditOpen(true);
-    }
-  };
-
-  const handleEditClose = () => {
-    setEditOpen(false);
-    setUserToEdit(null);
-  };
-
-  const onEditSubmit = async (data: any) => {
-    if (!userToEdit) return;
-    // Convert status string to boolean
-    const payload = {
-      ...data,
-      active: data.active === "active",
-    };
-    try {
-      await updateUser(userToEdit.id, payload);
-      showSnackbar("User updated successfully");
-      fetchAndSetUsers();
-      setEditOpen(false);
-      setUserToEdit(null);
-    } catch (err) {
-      showSnackbar(
-        err instanceof Error ? err.message : "Failed to update user",
-        "error"
-      );
-    }
-  };
-
-  // Show confirmation modal before deleting
-  const handleDeleteRequest = (user: User) => {
-    setUserToDelete(user);
-    setConfirmOpen(true);
-  };
-
-  // Confirm deletion
-  const handleDeleteConfirmed = async () => {
-    if (!userToDelete) return;
-    try {
-      await deleteUser(userToDelete.id);
-      showSnackbar("User deleted");
-      fetchAndSetUsers();
-      if (usersPage.content.length === 1 && currentPage > 0) {
-        setCurrentPage(0);
-      }
-    } catch (err) {
-      showSnackbar(
-        err instanceof Error ? err.message : "Failed to delete user",
-        "error"
-      );
-    } finally {
-      setConfirmOpen(false);
-      setUserToDelete(null);
-    }
-  };
-
-  // Cancel deletion
-  const handleDeleteCancel = () => {
-    setConfirmOpen(false);
-    setUserToDelete(null);
-  };
-
-  const handleChangePage = (event: unknown, newPage: number) => {
-    setCurrentPage(newPage);
-  };
-
-  const handleChangeRowsPerPage = (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    setRowsPerPage(parseInt(event.target.value, 10));
-    setCurrentPage(0);
-  };
-
-  const clearFilters = () => {
-    setFilters({
-      id: "",
-      name: "",
-      status: "all",
-      dateFrom: null,
-      dateTo: null,
-    });
-    setCurrentPage(0);
-  };
+  // Initial fetch
+  React.useEffect(() => {
+    debouncedFetchRef.current = fetchAndSetUsers;
+    debouncedFetchRef.current();
+  }, [rowsPerPage, currentPage, filters]);
 
   return (
     <Box sx={{ p: 3 }}>
@@ -272,97 +229,11 @@ export function UserManagement() {
       </Box>
 
       {/* Filters */}
-      <Card sx={{ mb: 3 }}>
-        <CardContent>
-          <Box
-            sx={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              mb: 3,
-            }}
-          >
-            <Typography variant="h6">Filters</Typography>
-            <Button
-              variant="outlined"
-              startIcon={<ClearIcon />}
-              onClick={clearFilters}
-            >
-              Clear Filters
-            </Button>
-          </Box>
-          <Grid container spacing={3}>
-            <Grid size={{ xs: 12, md: 6, lg: 4 }}>
-              <TextField
-                fullWidth
-                label="User ID"
-                placeholder="Search by ID..."
-                value={filters.id}
-                onChange={(e) =>
-                  setFilters((prev) => ({ ...prev, id: e.target.value }))
-                }
-              />
-            </Grid>
-            <Grid size={{ xs: 12, md: 6, lg: 4 }}>
-              <TextField
-                fullWidth
-                label="Name"
-                placeholder="Search by name or surname..."
-                value={filters.name}
-                onChange={(e) =>
-                  setFilters((prev) => ({ ...prev, name: e.target.value }))
-                }
-              />
-            </Grid>
-            <Grid size={{ xs: 12, md: 6, lg: 4 }}>
-              <FormControl fullWidth>
-                <InputLabel>Status</InputLabel>
-                <Select
-                  value={filters.status}
-                  label="Status"
-                  onChange={(e) =>
-                    setFilters((prev) => ({ ...prev, status: e.target.value }))
-                  }
-                >
-                  <MenuItem value="all">All statuses</MenuItem>
-                  <MenuItem value="active">Active</MenuItem>
-                  <MenuItem value="deactivated">Deactivated</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid size={{ xs: 12, md: 6, lg: 4 }}>
-              <TextField
-                fullWidth
-                type="date"
-                label="Creation Date From"
-                value={
-                  filters.dateFrom ? format(filters.dateFrom, "yyyy-MM-dd") : ""
-                }
-                onChange={(e) => {
-                  const date = e.target.value ? new Date(e.target.value) : null;
-                  setFilters((prev) => ({ ...prev, dateFrom: date }));
-                }}
-                InputLabelProps={{ shrink: true }}
-              />
-            </Grid>
-            <Grid size={{ xs: 12, md: 6, lg: 4 }}>
-              <TextField
-                fullWidth
-                type="date"
-                label="Creation Date To"
-                value={
-                  filters.dateTo ? format(filters.dateTo, "yyyy-MM-dd") : ""
-                }
-                onChange={(e) => {
-                  const date = e.target.value ? new Date(e.target.value) : null;
-                  setFilters((prev) => ({ ...prev, dateTo: date }));
-                }}
-                InputLabelProps={{ shrink: true }}
-              />
-            </Grid>
-          </Grid>
-        </CardContent>
-      </Card>
+      <UserFilters
+        filters={filters}
+        setFilters={setFilters}
+        clearFilters={clearFilters}
+      />
 
       {/* Results Summary */}
       <Box
@@ -394,239 +265,26 @@ export function UserManagement() {
 
       {!isLoading && !isError && (
         <Paper>
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>ID</TableCell>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Surname</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Email</TableCell>
-                  <TableCell>Telephone</TableCell>
-                  <TableCell>Creation Date</TableCell>
-                  <TableCell>Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {usersPage.content.map((user) => (
-                  <TableRow key={user.id} hover>
-                    <TableCell>{user.id}</TableCell>
-                    <TableCell>{user.name}</TableCell>
-                    <TableCell>{user.surname}</TableCell>
-                    <TableCell>
-                      <Chip
-                        label={user.active ? "Active" : "Deactivated"}
-                        color={user.active ? "success" : "default"}
-                        size="small"
-                      />
-                    </TableCell>
-                    <TableCell>{user.email}</TableCell>
-                    <TableCell>{user.phoneNumber}</TableCell>
-                    <TableCell>
-                      {format(new Date(user.createdAt), "PP")}
-                    </TableCell>
-                    <TableCell>
-                      <Box sx={{ display: "flex", gap: 1 }}>
-                        <IconButton
-                          size="small"
-                          onClick={() => handleSetStatus(user.id, !user.active)}
-                          color={user.active ? "error" : "success"}
-                          title={user.active ? "Deactivate" : "Activate"}
-                        >
-                          <PowerIcon />
-                        </IconButton>
-                        <IconButton
-                          size="small"
-                          onClick={() => handleEdit(user.id)}
-                          color="primary"
-                          title="Edit"
-                        >
-                          <EditIcon />
-                        </IconButton>
-                        <IconButton
-                          size="small"
-                          onClick={() => handleDeleteRequest(user)}
-                          color="error"
-                          title="Delete"
-                        >
-                          <DeleteIcon />
-                        </IconButton>
-                        {/* Confirmation Modal for Deletion */}
-                        <Dialog open={confirmOpen} onClose={handleDeleteCancel}>
-                          <Box sx={{ p: 2 }}>
-                            <Typography variant="h6" gutterBottom>
-                              Confirm Deletion
-                            </Typography>
-                            <Typography gutterBottom>
-                              Are you sure you want to delete user{" "}
-                              <b>
-                                {userToDelete?.name} {userToDelete?.surname}
-                              </b>
-                              ?
-                            </Typography>
-                            <Box
-                              sx={{
-                                display: "flex",
-                                justifyContent: "flex-end",
-                                gap: 2,
-                                mt: 2,
-                              }}
-                            >
-                              <Button
-                                onClick={handleDeleteCancel}
-                                color="primary"
-                                variant="outlined"
-                              >
-                                Cancel
-                              </Button>
-                              <Button
-                                onClick={handleDeleteConfirmed}
-                                color="error"
-                                variant="contained"
-                              >
-                                Delete
-                              </Button>
-                            </Box>
-                          </Box>
-                        </Dialog>
-                      </Box>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-
-          {/* Edit User Modal */}
-          <Dialog
+          <UserTable
+            users={usersPage.content}
+            onEdit={handleEdit}
+            onDelete={handleDeleteRequest}
+            onToggleStatus={handleSetStatus}
+          />
+          <UserDeleteDialog
+            open={confirmOpen}
+            user={userToDelete}
+            onCancel={handleDeleteCancel}
+            onConfirm={handleDeleteConfirmed}
+          />
+          <UserEditDialog
             open={editOpen}
+            userToEdit={userToEdit}
+            form={form}
+            onSubmit={onEditSubmit}
             onClose={handleEditClose}
-            maxWidth="sm"
-            fullWidth
-          >
-            <Box
-              component="form"
-              onSubmit={handleSubmit(onEditSubmit)}
-              sx={{ p: 3 }}
-            >
-              <Typography variant="h6" gutterBottom>
-                Edit User
-              </Typography>
-              <Grid container spacing={2}>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    label="Name"
-                    fullWidth
-                    {...register("name", {
-                      required: "Name is required",
-                      maxLength: {
-                        value: 100,
-                        message: "Name cannot exceed 100 characters",
-                      },
-                    })}
-                    error={!!errors.name}
-                    helperText={errors.name?.message}
-                  />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    label="Surname"
-                    fullWidth
-                    {...register("surname", {
-                      required: "Surname is required",
-                      maxLength: {
-                        value: 100,
-                        message: "Surname cannot exceed 100 characters",
-                      },
-                    })}
-                    error={!!errors.surname}
-                    helperText={errors.surname?.message}
-                  />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    label="Email"
-                    fullWidth
-                    {...register("email", {
-                      required: "Email is required",
-                      pattern: {
-                        value: /^[^@\s]+@[^@\s]+\.[^@\s]+$/,
-                        message: "Invalid email address",
-                      },
-                      maxLength: {
-                        value: 200,
-                        message: "Email cannot exceed 200 characters",
-                      },
-                    })}
-                    error={!!errors.email}
-                    helperText={errors.email?.message}
-                  />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    label="Phone Number"
-                    fullWidth
-                    {...register("phoneNumber", {
-                      required: "Phone number is required",
-                      maxLength: {
-                        value: 30,
-                        message: "Phone number cannot exceed 30 characters",
-                      },
-                    })}
-                    error={!!errors.phoneNumber}
-                    helperText={errors.phoneNumber?.message}
-                  />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <FormControl fullWidth>
-                    <InputLabel>Status</InputLabel>
-                    <Select
-                      label="Status"
-                      defaultValue={
-                        userToEdit?.active ? "active" : "deactivated"
-                      }
-                      {...register("active")}
-                      onChange={(e) => {
-                        reset((prev) => ({
-                          ...prev,
-                          active: e.target.value === "active",
-                        }));
-                      }}
-                    >
-                      <MenuItem value="active">Active</MenuItem>
-                      <MenuItem value="deactivated">Deactivated</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Grid>
-              </Grid>
-              <Box
-                sx={{
-                  display: "flex",
-                  justifyContent: "flex-end",
-                  gap: 2,
-                  mt: 3,
-                }}
-              >
-                <Button
-                  onClick={handleEditClose}
-                  variant="outlined"
-                  color="primary"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  variant="contained"
-                  color="success"
-                  disabled={isSubmitting}
-                >
-                  Save
-                </Button>
-              </Box>
-            </Box>
-          </Dialog>
-
+            isSubmitting={form.formState.isSubmitting}
+          />
           {usersPage.totalElements === 0 && (
             <Box sx={{ p: 4, textAlign: "center" }}>
               <Typography color="text.secondary">
@@ -634,8 +292,6 @@ export function UserManagement() {
               </Typography>
             </Box>
           )}
-
-          {/* Pagination */}
           <TablePagination
             component="div"
             count={usersPage.totalElements}
@@ -648,17 +304,12 @@ export function UserManagement() {
         </Paper>
       )}
 
-      {/* Snackbar for notifications */}
-      <Snackbar
+      <NotificationSnackbar
         open={snackbar.open}
-        autoHideDuration={6000}
+        message={snackbar.message}
+        severity={snackbar.severity}
         onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-      >
-        <Alert onClose={handleCloseSnackbar} severity={snackbar.severity}>
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
+      />
     </Box>
   );
 }
