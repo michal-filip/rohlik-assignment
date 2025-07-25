@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from "react";
+import React, { useState } from "react";
+import { toggleUserActive } from "../api/user";
 import { useQuery } from "@tanstack/react-query";
 import {
   Box,
@@ -44,8 +45,13 @@ type User = {
   createdAt: string;
 };
 
+type PaginatedResult<T> = {
+  content: T[];
+  totalElements: number;
+};
+
 // Fetch users from backend
-async function fetchUsers(): Promise<User[]> {
+async function fetchUsers(): Promise<PaginatedResult<User>> {
   const res = await fetch("http://localhost:8090/api/users");
   if (!res.ok) throw new Error("Failed to fetch users");
   return res.json();
@@ -53,16 +59,15 @@ async function fetchUsers(): Promise<User[]> {
 
 export function UserManagement() {
   const {
-    data: users = [],
+    data: usersPage = { content: [], totalElements: 0 },
     isLoading,
     isError,
     error,
     refetch,
-  } = useQuery<User[]>({
+  } = useQuery<PaginatedResult<User>>({
     queryKey: ["users"],
     queryFn: fetchUsers,
   });
-  const [usersState, setUsersState] = useState<User[]>([]); // for local status/delete only
   const [filters, setFilters] = useState({
     id: "",
     name: "",
@@ -78,46 +83,32 @@ export function UserManagement() {
     severity: "success" as "success" | "info" | "warning" | "error",
   });
 
-  // Merge server data with local state for status/delete (optimistic UI)
-  const mergedUsers = useMemo(() => {
-    if (usersState.length === 0) return users;
-    // Apply local changes (status toggles, deletions)
-    const ids = new Set(usersState.map((u) => u.id));
-    return [...usersState, ...users.filter((u) => !ids.has(u.id))];
-  }, [users, usersState]);
-
   // Filter users based on current filters
-  const filteredUsers = useMemo(() => {
-    return mergedUsers.filter((user) => {
-      const matchesId =
-        !filters.id || user.id.toLowerCase().includes(filters.id.toLowerCase());
-      const matchesName =
-        !filters.name ||
-        user.name.toLowerCase().includes(filters.name.toLowerCase()) ||
-        user.surname.toLowerCase().includes(filters.name.toLowerCase());
-      const matchesStatus =
-        filters.status === "all" ||
-        user.active === (filters.status === "active");
-      const matchesDateFrom =
-        !filters.dateFrom || new Date(user.createdAt) >= filters.dateFrom;
-      const matchesDateTo =
-        !filters.dateTo || new Date(user.createdAt) <= filters.dateTo;
+  // const filteredUsers = useMemo(() => {
+  //   return users.filter((user) => {
+  //     const matchesId =
+  //       !filters.id || user.id.toLowerCase().includes(filters.id.toLowerCase());
+  //     const matchesName =
+  //       !filters.name ||
+  //       user.name.toLowerCase().includes(filters.name.toLowerCase()) ||
+  //       user.surname.toLowerCase().includes(filters.name.toLowerCase());
+  //     const matchesStatus =
+  //       filters.status === "all" ||
+  //       user.active === (filters.status === "active");
+  //     const matchesDateFrom =
+  //       !filters.dateFrom || new Date(user.createdAt) >= filters.dateFrom;
+  //     const matchesDateTo =
+  //       !filters.dateTo || new Date(user.createdAt) <= filters.dateTo;
 
-      return (
-        matchesId &&
-        matchesName &&
-        matchesStatus &&
-        matchesDateFrom &&
-        matchesDateTo
-      );
-    });
-  }, [mergedUsers, filters]);
-
-  // Paginate filtered users
-  const paginatedUsers = filteredUsers.slice(
-    currentPage * rowsPerPage,
-    currentPage * rowsPerPage + rowsPerPage
-  );
+  //     return (
+  //       matchesId &&
+  //       matchesName &&
+  //       matchesStatus &&
+  //       matchesDateFrom &&
+  //       matchesDateTo
+  //     );
+  //   });
+  // }, [mergedUsers, filters]);
 
   const showSnackbar = (
     message: string,
@@ -130,31 +121,17 @@ export function UserManagement() {
     setSnackbar((prev) => ({ ...prev, open: false }));
   };
 
-  const handleStatusToggle = (userId: string) => {
-    setUsersState((prev) =>
-      prev.map((user) =>
-        user.id === userId
-          ? {
-              ...user,
-              status: user.active ? "deactivated" : "active",
-            }
-          : user
-      )
-    );
-    // If not in local state, update from server data
-    if (!usersState.some((u) => u.id === userId)) {
-      const user = users.find((u) => u.id === userId);
-      if (user) {
-        setUsersState((prev) => [
-          ...prev,
-          {
-            ...user,
-            status: user.active ? "deactivated" : "active",
-          },
-        ]);
-      }
+  const handleSetStatus = async (userId: string, active: boolean) => {
+    try {
+      await toggleUserActive(userId, active);
+      showSnackbar("User status updated");
+      refetch();
+    } catch (err) {
+      showSnackbar(
+        err instanceof Error ? err.message : "Failed to update user status",
+        "error"
+      );
     }
-    showSnackbar("User status updated locally (not persisted)");
   };
 
   const handleEdit = (userId: string) => {
@@ -162,18 +139,10 @@ export function UserManagement() {
   };
 
   const handleDelete = (userId: string) => {
-    setUsersState((prev) => prev.filter((user) => user.id !== userId));
-    // If not in local state, add all except deleted
-    if (!usersState.some((u) => u.id === userId)) {
-      setUsersState((prev) => [
-        ...prev,
-        ...users.filter(
-          (u) => u.id !== userId && !prev.some((pu) => pu.id === u.id)
-        ),
-      ]);
-    }
-    showSnackbar("User deleted locally (not persisted)");
-    if (paginatedUsers.length === 1 && currentPage > 0) {
+    // TODO: implement
+
+    showSnackbar("User deleted");
+    if (usersPage.content.length === 1 && currentPage > 0) {
       setCurrentPage(0);
     }
   };
@@ -332,7 +301,7 @@ export function UserManagement() {
         }}
       >
         <Typography variant="body2" color="text.secondary">
-          Showing {paginatedUsers.length} of {filteredUsers.length} users
+          Showing {usersPage.content.length} of {usersPage.totalElements} users
         </Typography>
       </Box>
 
@@ -353,7 +322,7 @@ export function UserManagement() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {paginatedUsers.map((user) => (
+              {usersPage.content.map((user) => (
                 <TableRow key={user.id} hover>
                   <TableCell>{user.id}</TableCell>
                   <TableCell>{user.name}</TableCell>
@@ -374,7 +343,7 @@ export function UserManagement() {
                     <Box sx={{ display: "flex", gap: 1 }}>
                       <IconButton
                         size="small"
-                        onClick={() => handleStatusToggle(user.id)}
+                        onClick={() => handleSetStatus(user.id, !user.active)}
                         color={user.active ? "error" : "success"}
                         title={user.active ? "Deactivate" : "Activate"}
                       >
@@ -404,7 +373,7 @@ export function UserManagement() {
           </Table>
         </TableContainer>
 
-        {paginatedUsers.length === 0 && (
+        {usersPage.totalElements === 0 && (
           <Box sx={{ p: 4, textAlign: "center" }}>
             <Typography color="text.secondary">
               No users found matching the current filters.
@@ -415,7 +384,7 @@ export function UserManagement() {
         {/* Pagination */}
         <TablePagination
           component="div"
-          count={filteredUsers.length}
+          count={usersPage.totalElements}
           page={currentPage}
           onPageChange={handleChangePage}
           rowsPerPage={rowsPerPage}
