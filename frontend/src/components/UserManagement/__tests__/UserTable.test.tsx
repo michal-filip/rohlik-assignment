@@ -2,7 +2,7 @@ import React from "react";
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { UserTable, UserTableProps } from "./UserTable";
+import { UserTable, UserTableProps } from "../UserTable";
 
 const users = [
   {
