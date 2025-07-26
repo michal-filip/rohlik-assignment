@@ -1,0 +1,149 @@
+openapi: 3.0.3
+info:
+  title: Rohlik Assignment User API
+  version: 1.0.0
+  description: API for user management (backend)
+servers:
+  - url: http://localhost:8090/api
+paths:
+  /users:
+    get:
+      summary: Get paginated list of users
+      parameters:
+        - in: query
+          name: pageNumber
+          schema:
+            type: integer
+            default: 0
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 10
+        - in: query
+          name: id
+          schema:
+            type: string
+        - in: query
+          name: name
+          schema:
+            type: string
+        - in: query
+          name: active
+          schema:
+            type: boolean
+        - in: query
+          name: createdAtFrom
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: createdAtTo
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: Paginated list of users
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedUserResult"
+        "400":
+          description: Invalid parameters
+  /users/{userId}:
+    put:
+      summary: Update user
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserPayload"
+      responses:
+        "200":
+          description: User updated
+        "404":
+          description: User not found
+    delete:
+      summary: Delete user
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: User deleted
+        "404":
+          description: User not found
+  /users/{userId}/active:
+    put:
+      summary: Toggle user active state
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                active:
+                  type: boolean
+      responses:
+        "200":
+          description: User active state updated
+        "404":
+          description: User not found
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        name:
+          type: string
+        surname:
+          type: string
+        active:
+          type: boolean
+        email:
+          type: string
+        phoneNumber:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    PaginatedUserResult:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/User"
+        totalElements:
+          type: integer
+    UpdateUserPayload:
+      type: object
+      properties:
+        name:
+          type: string
+        surname:
+          type: string
+        email:
+          type: string
+        phoneNumber:
+          type: string
+        active:
+          type: boolean
