@@ -2,8 +2,6 @@ package cz.rohlik.assignment.michalfilip.backend.model;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Temporal;
@@ -13,13 +11,17 @@ import java.util.UUID;
 import lombok.AccessLevel;
 import lombok.Data;
 import lombok.Setter;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UuidGenerator;
 
 @Entity
 @Data
 @Table(name = "\"user\"")
 public class User {
 
-  @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+  @Id
+  @UuidGenerator
+  @Column(columnDefinition = "BINARY(16)")
   @Setter(AccessLevel.NONE)
   private UUID id;
   @Column(nullable = false, length = 100)
@@ -32,6 +34,7 @@ public class User {
   private String phoneNumber;
   @Column
   private boolean active;
+  @CreationTimestamp
   @Column(nullable = false)
   @Temporal(TemporalType.TIMESTAMP)
   private Date createdAt;
